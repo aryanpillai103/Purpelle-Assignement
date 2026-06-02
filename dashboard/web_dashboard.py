@@ -1,27 +1,42 @@
-# streamlit_app.py - Deploy this to Streamlit Cloud
+# streamlit_app.py - Secure version with no hardcoded values
 import streamlit as st
 import requests
 import pandas as pd
 import time
 from datetime import datetime
+import os
 
+# ============================================
+# LOAD API URL FROM ENVIRONMENT VARIABLE
+# ============================================
+# For Streamlit Cloud: Set in Secrets Management
+# For Local: Use .env file or environment variable
 
-API_URL = "https://purpelle-assignement.onrender.com"  # Change to your Render URL
+# Try to get from Streamlit secrets first (for cloud)
+try:
+    API_URL = st.secrets["API_URL"]
+except:
+    # Fallback to environment variable (for local development)
+    API_URL = os.environ.get("API_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="Apex Retail Analytics", layout="wide", page_icon="🏪")
 
 st.title("🏪 Apex Retail - Live Store Analytics")
 
+# Display API status without exposing URL
+with st.expander("ℹ️ System Status", expanded=False):
+    st.info(f"Connected to analytics backend")
+
 # Check API connection
 try:
     response = requests.get(f"{API_URL}/health", timeout=10)
     if response.status_code == 200:
-        st.success(f"✅ Connected to Analytics API")
+        st.success("✅ Connected to Analytics API")
     else:
         st.error("⚠️ API is not responding correctly")
         st.stop()
 except Exception as e:
-    st.error(f"❌ Cannot connect to API at {API_URL}")
+    st.error("❌ Cannot connect to analytics backend")
     st.info("""
     ### Backend API is deploying...
     Please wait 1-2 minutes for the backend to start.
@@ -37,7 +52,6 @@ store_id = st.sidebar.selectbox(
     ["STORE_BLR_001", "STORE_DEL_001", "STORE_MUM_001"]
 )
 refresh_rate = st.sidebar.slider("Refresh (seconds)", 3, 15, 5)
-st.sidebar.info(f"🖥️ API: {API_URL}")
 
 # Main content
 placeholder = st.empty()
@@ -51,7 +65,6 @@ def fetch_data():
         heatmap = requests.get(f"{API_URL}/stores/{store_id}/heatmap", timeout=10).json()
         return metrics, funnel, anomalies, heatmap
     except Exception as e:
-        st.error(f"Error fetching data: {e}")
         return None, None, None, None
 
 # Auto-refresh loop
@@ -94,7 +107,8 @@ while True:
                 st.warning("⚠️ Active Anomalies Detected")
                 for a in anomalies['anomalies']:
                     st.write(f"- **{a['type']}**: {a['description']}")
-                    st.write(f"  → Suggested Action: {a.get('suggested_action', 'Monitor closely')}")
+                    if a.get('suggested_action'):
+                        st.write(f"  → Suggested Action: {a['suggested_action']}")
             
             # Dwell times
             if metrics.get('avg_dwell_by_zone'):
