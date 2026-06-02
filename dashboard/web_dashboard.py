@@ -5,7 +5,7 @@ import requests
 import pandas as pd
 import time
 
-API_URL = "http://localhost:8000"
+API_URL = "http://127.0.0.1:8000"
 STORES = ["STORE_BLR_001", "STORE_DEL_001", "STORE_MUM_001"]
 
 st.set_page_config(page_title="Apex Retail Analytics", layout="wide")
