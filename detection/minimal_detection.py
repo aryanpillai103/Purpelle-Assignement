@@ -228,7 +228,7 @@ def main():
     detector = MinimalDetector()
     
     # Path to your clips - UPDATE THIS PATH
-    clips_dir = "data/clips"  # Change to where your clips are
+    clips_dir = r"E:\purpelle resources\CCTV Footage"  # Change to where your clips are
     
     # Check if clips directory exists
     if not Path(clips_dir).exists():

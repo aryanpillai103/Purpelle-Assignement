@@ -1,4 +1,4 @@
-# api/main_render.py - Complete with all POS data from your CSV
+# api/main_render.py - Complete with full POS data from CSV (101 transactions)
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -7,6 +7,8 @@ from typing import List, Optional, Dict, Any
 import sqlite3
 import json
 import os
+import csv
+from pathlib import Path
 
 app = FastAPI(title="Apex Retail Analytics API")
 
@@ -22,38 +24,92 @@ app.add_middleware(
 DB_PATH = os.environ.get("DATABASE_PATH", "/tmp/store_analytics.db")
 
 # ============================================
-# COMPLETE POS DATA FROM YOUR CSV FILE
-# All 87 transactions from Brigade Road store
+# COMPLETE POS DATA FROM YOUR NEW CSV FILE
+# All 101 transactions from Brigade Road store (STORE_BLR_002)
 # Date: April 10, 2026
 # ============================================
 
-ALL_POS_TRANSACTIONS = [
-    {"transaction_id": "104363838", "timestamp": "2026-04-10T16:55:36Z", "basket_value": 274.36, "customer_name": "Guest"},
-    {"transaction_id": "104377545", "timestamp": "2026-04-10T19:21:55Z", "basket_value": 99.00, "customer_name": "sagar"},
-    {"transaction_id": "104362899", "timestamp": "2026-04-10T16:45:32Z", "basket_value": 553.17, "customer_name": "Guest"},
-    {"transaction_id": "104373042", "timestamp": "2026-04-10T18:41:51Z", "basket_value": 1799.00, "customer_name": "Nivya Sara"},
-    {"transaction_id": "104375288", "timestamp": "2026-04-10T19:02:09Z", "basket_value": 466.67, "customer_name": "rupa"},
-    {"transaction_id": "104346717", "timestamp": "2026-04-10T13:41:55Z", "basket_value": 49.50, "customer_name": "madeeha thaseeb"},
-    {"transaction_id": "104380754", "timestamp": "2026-04-10T19:54:02Z", "basket_value": 198.00, "customer_name": "wilma"},
-    {"transaction_id": "104341290", "timestamp": "2026-04-10T12:42:18Z", "basket_value": 1.00, "customer_name": "thanu thanu"},
-    {"transaction_id": "104369411", "timestamp": "2026-04-10T17:55:02Z", "basket_value": 215.67, "customer_name": "monalisa"},
-    {"transaction_id": "104338647", "timestamp": "2026-04-10T12:15:05Z", "basket_value": 302.33, "customer_name": "sugitha"},
-    {"transaction_id": "104347785", "timestamp": "2026-04-10T13:55:16Z", "basket_value": 2.00, "customer_name": "sera"},
-    {"transaction_id": "104383803", "timestamp": "2026-04-10T20:25:04Z", "basket_value": 224.31, "customer_name": "SAVIA"},
-    {"transaction_id": "104378732", "timestamp": "2026-04-10T19:33:52Z", "basket_value": 249.00, "customer_name": "Guest"},
-    {"transaction_id": "104350137", "timestamp": "2026-04-10T14:23:21Z", "basket_value": 225.00, "customer_name": "Bharti Bajaj"},
-    {"transaction_id": "104359750", "timestamp": "2026-04-10T16:08:03Z", "basket_value": 799.00, "customer_name": "fana"},
-    {"transaction_id": "104379480", "timestamp": "2026-04-10T19:41:29Z", "basket_value": 450.00, "customer_name": "anmika"},
-    {"transaction_id": "104358212", "timestamp": "2026-04-10T15:50:44Z", "basket_value": 400.00, "customer_name": "zthise"},
-    {"transaction_id": "104357849", "timestamp": "2026-04-10T15:46:39Z", "basket_value": 599.00, "customer_name": "Guest"},
-    {"transaction_id": "104353598", "timestamp": "2026-04-10T15:02:20Z", "basket_value": 314.80, "customer_name": "suman"},
-    {"transaction_id": "104368521", "timestamp": "2026-04-10T17:44:44Z", "basket_value": 299.00, "customer_name": "nikitha"},
-    {"transaction_id": "104389493", "timestamp": "2026-04-10T21:16:15Z", "basket_value": 269.10, "customer_name": "Guest"},
-    {"transaction_id": "104391745", "timestamp": "2026-04-10T21:39:55Z", "basket_value": 427.50, "customer_name": "Guest"},
-    {"transaction_id": "104369867", "timestamp": "2026-04-10T18:00:18Z", "basket_value": 149.00, "customer_name": "Jaya Hiranandani"},
-]
+def load_pos_from_csv():
+    """Load POS data from CSV file - 101 transactions"""
+    pos_transactions = []
+    
+    # Look for CSV file
+    csv_paths = [
+        "POS - sample transactionsb1e826f.csv",
+        "data/pos_transactions.csv",
+        "/app/POS - sample transactionsb1e826f.csv",
+    ]
+    
+    csv_file = None
+    for path in csv_paths:
+        if Path(path).exists():
+            csv_file = path
+            break
+    
+    if not csv_file:
+        print("⚠️ CSV file not found, using embedded data")
+        return get_embedded_pos_data()
+    
+    print(f"📖 Loading POS data from: {csv_file}")
+    
+    with open(csv_file, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                amount = float(row.get('total_amount', 0))
+                if amount == 0:
+                    continue  # Skip zero-value items (carry bags, etc.)
+                
+                order_date = row.get('order_date', '')
+                order_time = row.get('order_time', '')
+                
+                if order_date and order_time:
+                    day, month, year = order_date.split('-')
+                    timestamp = f"{year}-{month}-{day}T{order_time}Z"
+                else:
+                    timestamp = "2026-04-10T00:00:00Z"
+                
+                transaction = {
+                    "transaction_id": row.get('order_id', ''),
+                    "timestamp": timestamp,
+                    "basket_value": amount,
+                    "customer_name": "Guest"
+                }
+                
+                if transaction["transaction_id"]:
+                    pos_transactions.append(transaction)
+                    
+            except Exception as e:
+                print(f"⚠️ Error parsing row: {e}")
+                continue
+    
+    print(f"✅ Loaded {len(pos_transactions)} POS transactions from CSV")
+    return pos_transactions
 
-# Calculate totals
+def get_embedded_pos_data():
+    """Fallback embedded POS data (sample from CSV)"""
+    return [
+        {"transaction_id": "1", "timestamp": "2026-04-10T12:15:05Z", "basket_value": 302.33, "customer_name": "Guest"},
+        {"transaction_id": "2", "timestamp": "2026-04-10T12:15:05Z", "basket_value": 491.77, "customer_name": "Guest"},
+        {"transaction_id": "3", "timestamp": "2026-04-10T12:15:05Z", "basket_value": 453.88, "customer_name": "Guest"},
+        {"transaction_id": "28", "timestamp": "2026-04-10T13:41:55Z", "basket_value": 49.50, "customer_name": "Guest"},
+        {"transaction_id": "35", "timestamp": "2026-04-10T15:02:20Z", "basket_value": 314.80, "customer_name": "suman"},
+        {"transaction_id": "42", "timestamp": "2026-04-10T16:45:32Z", "basket_value": 553.17, "customer_name": "Guest"},
+        {"transaction_id": "48", "timestamp": "2026-04-10T16:55:36Z", "basket_value": 274.36, "customer_name": "Guest"},
+        {"transaction_id": "57", "timestamp": "2026-04-10T17:55:02Z", "basket_value": 215.67, "customer_name": "monalisa"},
+        {"transaction_id": "66", "timestamp": "2026-04-10T18:41:51Z", "basket_value": 1448.18, "customer_name": "Nivya Sara"},
+        {"transaction_id": "69", "timestamp": "2026-04-10T19:02:09Z", "basket_value": 466.67, "customer_name": "rupa"},
+        {"transaction_id": "75", "timestamp": "2026-04-10T19:21:55Z", "basket_value": 99.00, "customer_name": "sagar"},
+        {"transaction_id": "84", "timestamp": "2026-04-10T19:33:52Z", "basket_value": 249.00, "customer_name": "Guest"},
+        {"transaction_id": "87", "timestamp": "2026-04-10T19:41:29Z", "basket_value": 450.00, "customer_name": "anmika"},
+        {"transaction_id": "92", "timestamp": "2026-04-10T19:54:02Z", "basket_value": 198.00, "customer_name": "wilma"},
+        {"transaction_id": "96", "timestamp": "2026-04-10T20:25:04Z", "basket_value": 224.31, "customer_name": "SAVIA"},
+        {"transaction_id": "100", "timestamp": "2026-04-10T21:16:15Z", "basket_value": 269.10, "customer_name": "Guest"},
+        {"transaction_id": "101", "timestamp": "2026-04-10T21:39:55Z", "basket_value": 427.50, "customer_name": "Guest"},
+    ]
+
+# Load POS data
+ALL_POS_TRANSACTIONS = load_pos_from_csv()
 TOTAL_POS_REVENUE = sum(tx["basket_value"] for tx in ALL_POS_TRANSACTIONS)
 TOTAL_POS_COUNT = len(ALL_POS_TRANSACTIONS)
 
@@ -92,8 +148,8 @@ def init_db():
         )
     ''')
     
-    # Insert POS data if not already present
-    cursor = conn.execute("SELECT COUNT(*) FROM pos_transactions WHERE store_id = 'STORE_BLR_001'")
+    # Insert POS data if not already present (using CORRECT store ID: STORE_BLR_002)
+    cursor = conn.execute("SELECT COUNT(*) FROM pos_transactions WHERE store_id = 'STORE_BLR_002'")
     existing_count = cursor.fetchone()[0]
     
     if existing_count == 0:
@@ -104,7 +160,7 @@ def init_db():
                 (store_id, transaction_id, timestamp, basket_value, customer_name)
                 VALUES (?, ?, ?, ?, ?)
             ''', (
-                "STORE_BLR_001",
+                "STORE_BLR_002",  # Updated to correct store ID
                 tx["transaction_id"],
                 tx["timestamp"],
                 tx["basket_value"],
@@ -112,6 +168,8 @@ def init_db():
             ))
         conn.commit()
         print(f"✅ Inserted {len(ALL_POS_TRANSACTIONS)} POS transactions")
+    else:
+        print(f"📊 POS data already exists: {existing_count} transactions")
     
     # Show counts
     cursor = conn.execute("SELECT COUNT(*) FROM events")
@@ -140,6 +198,8 @@ def health():
     event_count = cursor.fetchone()[0]
     cursor = conn.execute("SELECT COUNT(*) FROM pos_transactions")
     pos_count = cursor.fetchone()[0]
+    cursor = conn.execute("SELECT SUM(basket_value) FROM pos_transactions")
+    total_rev = cursor.fetchone()[0] or 0
     conn.close()
     
     return {
@@ -147,7 +207,7 @@ def health():
         "timestamp": datetime.now().isoformat(),
         "events_stored": event_count,
         "pos_transactions": pos_count,
-        "total_revenue": TOTAL_POS_REVENUE
+        "total_revenue": round(total_rev, 2)
     }
 
 @app.get("/stores/{store_id}/metrics")
@@ -235,6 +295,15 @@ def get_funnel(store_id: str):
     ''', (store_id,))
     zone_visits = cursor.fetchone()['count'] or 0
     
+    # If no zone_enter events, use ZONE_DWELL as proxy
+    if zone_visits == 0:
+        cursor = conn.execute('''
+            SELECT COUNT(DISTINCT visitor_id) as count
+            FROM events
+            WHERE store_id = ? AND event_type = 'ZONE_DWELL' AND is_staff = 0
+        ''', (store_id,))
+        zone_visits = cursor.fetchone()['count'] or 0
+    
     # Stage 3: Billing queue
     cursor = conn.execute('''
         SELECT COUNT(DISTINCT visitor_id) as count
@@ -253,11 +322,16 @@ def get_funnel(store_id: str):
     
     conn.close()
     
+    # Calculate drop-offs safely
+    drop_zone = max(0, entries - zone_visits)
+    drop_billing = max(0, zone_visits - billing)
+    drop_purchase = max(0, billing - purchases)
+    
     stages = [
         {"name": "Store Entry", "count": entries, "drop_off": 0},
-        {"name": "Product Zone", "count": zone_visits, "drop_off": entries - zone_visits if entries > zone_visits else 0},
-        {"name": "Billing Queue", "count": billing, "drop_off": zone_visits - billing if zone_visits > billing else 0},
-        {"name": "Purchase", "count": purchases, "drop_off": billing - purchases if billing > purchases else 0}
+        {"name": "Product Zone", "count": zone_visits, "drop_off": drop_zone},
+        {"name": "Billing Queue", "count": billing, "drop_off": drop_billing},
+        {"name": "Purchase", "count": purchases, "drop_off": drop_purchase}
     ]
     
     return {"store_id": store_id, "stages": stages, "timestamp": datetime.now().isoformat()}
@@ -265,31 +339,82 @@ def get_funnel(store_id: str):
 @app.get("/stores/{store_id}/anomalies")
 def get_anomalies(store_id: str):
     conn = sqlite3.connect(DB_PATH)
+    
+    # Check event count
     cursor = conn.execute("SELECT COUNT(*) FROM events WHERE store_id = ?", (store_id,))
     event_count = cursor.fetchone()[0]
+    
+    # Check conversion rate
+    cursor = conn.execute("SELECT COUNT(*) FROM pos_transactions WHERE store_id = ?", (store_id,))
+    pos_count = cursor.fetchone()[0]
+    
+    cursor = conn.execute("SELECT COUNT(DISTINCT visitor_id) FROM events WHERE store_id = ? AND event_type = 'ENTRY' AND is_staff = 0", (store_id,))
+    visitor_count = cursor.fetchone()[0] or 1
+    
+    conversion_rate = pos_count / visitor_count if visitor_count > 0 else 0
+    
     conn.close()
     
     anomalies = []
+    
     if event_count == 0:
         anomalies.append({
             "type": "NO_DATA",
             "severity": "CRITICAL",
             "description": "No events received for this store",
-            "suggested_action": "Run detection pipeline"
+            "suggested_action": "Run detection pipeline and upload events"
+        })
+    
+    if visitor_count > 20 and conversion_rate < 0.1:
+        anomalies.append({
+            "type": "CONVERSION_DROP",
+            "severity": "WARN",
+            "description": f"Conversion rate is only {conversion_rate*100:.1f}%",
+            "suggested_action": "Check product displays and staff assistance"
         })
     
     return {"anomalies": anomalies, "timestamp": datetime.now().isoformat()}
 
 @app.get("/stores/{store_id}/heatmap")
 def get_heatmap(store_id: str):
-    return {
-        "store_id": store_id,
-        "zones": [
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    
+    # Get actual zone data from events
+    cursor = conn.execute('''
+        SELECT zone_id, COUNT(*) as visits, AVG(dwell_ms) as avg_dwell
+        FROM events
+        WHERE store_id = ? AND zone_id IS NOT NULL AND zone_id != ''
+        GROUP BY zone_id
+        ORDER BY visits DESC
+    ''', (store_id,))
+    
+    zones = []
+    rows = cursor.fetchall()
+    
+    if rows:
+        max_visits = max(row['visits'] for row in rows)
+        for row in rows:
+            frequency = (row['visits'] / max_visits * 100) if max_visits > 0 else 0
+            zones.append({
+                "name": row['zone_id'],
+                "frequency": round(frequency, 1),
+                "dwell": round(row['avg_dwell'] or 0, 0)
+            })
+    else:
+        # Default zones if no data
+        zones = [
             {"name": "Entry Area", "frequency": 100, "dwell": 5},
             {"name": "Main Floor", "frequency": 80, "dwell": 180},
             {"name": "Billing Counter", "frequency": 45, "dwell": 120}
-        ],
-        "data_confidence": "medium",
+        ]
+    
+    conn.close()
+    
+    return {
+        "store_id": store_id,
+        "zones": zones,
+        "data_confidence": "high" if len(zones) > 5 else "medium",
         "timestamp": datetime.now().isoformat()
     }
 
@@ -341,7 +466,8 @@ def get_pos_summary(store_id: str):
     conn.row_factory = sqlite3.Row
     
     cursor = conn.execute('''
-        SELECT COUNT(*) as count, SUM(basket_value) as total, AVG(basket_value) as avg
+        SELECT COUNT(*) as count, COALESCE(SUM(basket_value), 0) as total, 
+               COALESCE(AVG(basket_value), 0) as avg
         FROM pos_transactions
         WHERE store_id = ?
     ''', (store_id,))
