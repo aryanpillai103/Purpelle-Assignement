@@ -1,4 +1,4 @@
-# upload_events_to_render.py
+# upload_events_to_render.py - Updated for STORE_BLR_002
 import requests
 import json
 import time
@@ -18,7 +18,9 @@ def upload_events():
         health_response = requests.get(f"{API_URL}/health", timeout=10)
         if health_response.status_code == 200:
             print("✅ API is reachable!")
-            print(f"   Response: {health_response.json()}")
+            health_data = health_response.json()
+            print(f"   Events stored: {health_data.get('events_stored', 0)}")
+            print(f"   POS transactions: {health_data.get('pos_transactions', 0)}")
         else:
             print(f"⚠️ API returned status: {health_response.status_code}")
     except Exception as e:
@@ -42,6 +44,16 @@ def upload_events():
                 events.append(json.loads(line))
     
     print(f"   Loaded {len(events)} events")
+    
+    # Optional: Fix store_id in events (convert STORE_BLR_001 to STORE_BLR_002 if needed)
+    fixed_count = 0
+    for event in events:
+        if event.get('store_id') == 'STORE_BLR_001':
+            event['store_id'] = 'STORE_BLR_002'
+            fixed_count += 1
+    
+    if fixed_count > 0:
+        print(f"   🔄 Fixed {fixed_count} events: STORE_BLR_001 → STORE_BLR_002")
     
     # Send in batches of 500
     batch_size = 500
@@ -93,23 +105,43 @@ def upload_events():
     print(f"   ✅ Accepted: {total_accepted}")
     print(f"   🔄 Duplicates: {total_duplicates}")
     print(f"   ❌ Failed batches: {failed_batches}")
-    print(f"   📈 Success rate: {(total_accepted/len(events))*100:.1f}%")
+    if len(events) > 0:
+        print(f"   📈 Success rate: {(total_accepted/len(events))*100:.1f}%")
     print("=" * 60)
     
-    # Verify data was uploaded
+    # Verify data was uploaded - UPDATED to use STORE_BLR_002
     print("\n🔍 Verifying upload...")
-    for store in ["STORE_BLR_001", "STORE_DEL_001", "STORE_MUM_001"]:
+    
+    # Updated store list with STORE_BLR_002
+    stores_to_check = ["STORE_BLR_002", "STORE_DEL_001", "STORE_MUM_001"]
+    
+    for store in stores_to_check:
         try:
             resp = requests.get(f"{API_URL}/stores/{store}/metrics", timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
-                print(f"   {store}: {data.get('unique_visitors', 0)} visitors")
+                print(f"   {store}: {data.get('unique_visitors', 0)} visitors, "
+                      f"{data.get('total_transactions', 0)} transactions")
             else:
-                print(f"   {store}: API error")
-        except:
-            print(f"   {store}: Connection error")
+                print(f"   {store}: API error (HTTP {resp.status_code})")
+        except Exception as e:
+            print(f"   {store}: Connection error - {str(e)[:50]}")
     
-    print("\n✅ Upload complete! Refresh your Streamlit dashboard.")
+    # Check health again to confirm events_stored
+    print("\n🔍 Final health check:")
+    try:
+        resp = requests.get(f"{API_URL}/health", timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            print(f"   ✅ Events stored: {data.get('events_stored', 0)}")
+            print(f"   ✅ POS transactions: {data.get('pos_transactions', 0)}")
+            print(f"   ✅ Total revenue: ₹{data.get('total_revenue', 0):,.2f}")
+    except Exception as e:
+        print(f"   ⚠️ Could not fetch health: {e}")
+    
+    print("\n" + "=" * 60)
+    print("✅ Upload complete! Refresh your Streamlit dashboard.")
+    print("=" * 60)
 
 if __name__ == "__main__":
     upload_events()
